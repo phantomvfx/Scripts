@@ -53,7 +53,7 @@ for obj in bpy.context.view_layer.objects:
             # Set the frame method to 'CROP'
             background_image.frame_method = 'CROP'
             # Set the scale of the background image
-            background_image.scale = 1.03
+            background_image.scale = 1
 
         # Optional: Handle potential case of no background image
         if not obj.data.background_images:
