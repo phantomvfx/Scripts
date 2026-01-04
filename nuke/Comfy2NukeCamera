@@ -1,0 +1,75 @@
+import nuke
+import json
+import os
+
+# ==========================================
+# CONFIGURATION
+# ==========================================
+# Use 'r' before the string to handle Windows backslashes correctly
+json_path = r"D:\ComfyUI\output\VFX\Camera.txt" 
+sensor_width_mm = 36.0
+
+# ==========================================
+# MAIN SCRIPT
+# ==========================================
+if os.path.exists(json_path):
+    try:
+        with open(json_path, 'r') as f:
+            data = json.load(f)
+            
+            # 1. Extract Data
+            # Structure: intrinsics -> list -> image_0 -> matrix 3x3
+            matrix = data['intrinsics'][0]['image_0']
+            fx = matrix[0][0]
+            cx = matrix[0][2]
+            cy = matrix[1][2]
+            
+            # 2. Calculate Dimensions & Lens
+            width = int(cx * 2)
+            height = int(cy * 2)
+            
+            # Calculate Focal Length: (fx * sensor_width) / image_width
+            focal_length_mm = (fx * sensor_width_mm) / width
+            
+            # Calculate Vertical Aperture (Nuke needs this manually)
+            # vaperture = haperture * (height / width)
+            sensor_height_mm = sensor_width_mm * (float(height) / width)
+
+            # 3. Create or Update Camera
+            cam_name = "ComfyCam"
+            cam_node = nuke.toNode(cam_name)
+
+            if cam_node is None:
+                # Create new if it doesn't exist
+                cam_node = nuke.createNode("Camera3")
+                cam_node.setName(cam_name)
+                # Optional: Add an Axis node parent for easier rotation fix later
+                print("Created new Camera.")
+            else:
+                print("Updating existing Camera...")
+
+            # 4. Apply Camera Settings
+            cam_node['haperture'].setValue(sensor_width_mm)
+            cam_node['vaperture'].setValue(sensor_height_mm)
+            cam_node['focal'].setValue(focal_length_mm)
+            
+            # Reset transform to 0 (You usually align via an Axis node in Nuke)
+            cam_node['translate'].setValue([0, 0, 0])
+            cam_node['rotate'].setValue([0, 0, 0])
+
+            # Add a label so you can see the data in the node graph
+            cam_node['label'].setValue(f"Res: {width}x{height}\nFocal: {focal_length_mm:.2f}mm")
+
+            # 5. Update Project Settings (Root) Resolution
+            # This ensures your background plate matches the camera solve
+            format_name = "ComfyFormat"
+            new_format_str = f"{width} {height} 1.0 {format_name}"
+            nuke.addFormat(new_format_str)
+            nuke.root()['format'].setValue(format_name)
+            
+            print(f"SUCCESS: Camera updated to {focal_length_mm:.2f}mm. Project set to {width}x{height}.")
+
+    except Exception as e:
+        nuke.message(f"Error parsing JSON:\n{str(e)}")
+else:
+    nuke.message("JSON file not found.\nPlease run ComfyUI generation first.")
